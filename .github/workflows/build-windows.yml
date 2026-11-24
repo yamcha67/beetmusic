@@ -1,0 +1,65 @@
+name: Build Windows app
+
+on:
+  workflow_dispatch:        # Actions tab -> "Build Windows app" -> Run workflow
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MSYS2 (GTK 4, libadwaita, GStreamer, Python)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-ntldd
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-gobject
+            mingw-w64-x86_64-python-cairo
+            mingw-w64-x86_64-python-mutagen
+            mingw-w64-x86_64-gtk4
+            mingw-w64-x86_64-libadwaita
+            mingw-w64-x86_64-librsvg
+            mingw-w64-x86_64-gdk-pixbuf2
+            mingw-w64-x86_64-adwaita-icon-theme
+            mingw-w64-x86_64-hicolor-icon-theme
+            mingw-w64-x86_64-gstreamer
+            mingw-w64-x86_64-gst-plugins-base
+            mingw-w64-x86_64-gst-plugins-good
+            mingw-w64-x86_64-gst-plugins-bad
+            mingw-w64-x86_64-gst-plugins-ugly
+            mingw-w64-x86_64-gst-libav
+
+      - name: Bundle the app
+        shell: msys2 {0}
+        run: bash windows/bundle.sh
+
+      - name: Give BeetMusic.exe the app icon
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe" -OutFile rcedit.exe
+          .\rcedit.exe "dist\BeetMusic\bin\BeetMusic.exe" --set-icon "assets\beet-music.ico" `
+            --set-version-string FileDescription "Beet Music" --set-version-string ProductName "Beet Music"
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer.iss
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\BeetMusic -DestinationPath release\BeetMusic-portable.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BeetMusic-Windows
+          path: |
+            release/BeetMusic-Setup.exe
+            release/BeetMusic-portable.zip
